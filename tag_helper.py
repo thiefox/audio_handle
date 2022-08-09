@@ -1,4 +1,4 @@
-from genericpath import isfile
+from genericpath import isdir, isfile
 import os
 import sys
 import re
@@ -7,15 +7,16 @@ from sre_parse import SPECIAL_CHARS
 from sys import path
 from datetime import datetime 
 
-
 import langconv
+
+import StrHandler
 
 YEAR_FORMAT_HEADER = r"^(\d{4})"        #专辑年份开头
 YEAR_FORMAT_TAILER = r"(\d{4})$"        #专辑年份结尾
 YEAR_FORMAT_MIDDLE = r"(\d{4})[ -._]"    #空格(32) -(45) .(46) _(95) []内必须按ascii序
 
-AUDIO_FORMAT_NAMES = ('WAV', 'APE', 'MP3', 'FLAC', 'AAC', )
-SPLITTERS = ('.', '-', ' ', )
+AUDIO_FORMAT_NAMES = ('WAV', 'APE', 'MP3', 'FLAC', 'AAC', 'M4A', )
+SPLITTERS = ('.', '-', '_', ' ', )
 SPLITTERS_PAIR = ( ('[', ']'), ('(', ')'), )
 
 REMASTERED_FLAG = 'REMASTERED'
@@ -31,11 +32,18 @@ SPECIAL_WORDS = ('VA', '群星', )
 SPECIAL_WORDS_SUFFIX = ' -'
 
 #ALBUM_NAME_SPLITTERS = r'[-()\[\]]'
-ALBUM_NAME_SPLITTERS_MATCH = r'(-|\.|\(|\)|\[|\])\s*'       # 分隔符："-()[]"，后面带N个空格
-ALBUM_NAME_SPLITTERS = ('-', '.', '(', ')', '[', ']')
+ALBUM_NAME_SPLITTERS_MATCH = r'(-|_|\.|\(|\)|\[|\])\s*'       # 分隔符："-_()[]"，后面带N个空格
+ALBUM_NAME_SPLITTERS = ('-', '.', '_', '(', ')', '[', ']', '《', '》', '+', )
+
+CHS_ALBUM_NAME_SPLITTERS_MATCH = r'(-|_| |《|》|\+|\.|\(|\)|\[|\])\s*'
+
+
+SPLITTER_SPACE = ' '
 
 KEY_NAME_ARTIST_DIR = 'ARTIST_DIR'
 KEY_NAME_ALBUMS = 'ALBUMS'
+
+IGNORE_WORDS = ('320K', '分轨', '专辑', 'WAV整轨', 'FLAC分轨', '原抓', )
 
 # 转换繁体到简体
 def cht_to_chs(str) :
@@ -90,13 +98,25 @@ def is_year_info(info : str) -> bool :
         year = yi >= 1900 and yi <= 3000
     return year
 
-#检测一个目录下是否有音频文件
+def is_matched_band_name(band_name : str, info : str) -> bool :
+    if band_name == '' or info == '' :
+        return False
+    if band_name.upper() == info.upper() :
+        return True
+    if band_name.endswith('乐队') and band_name[:-2].upper() == info.upper() :
+        return True
+    if info.endswith('乐队') and info[:-2].upper() == band_name.upper() :
+        return True
+    return False
+
+#检测一个目录下是否有音频文件(不检查子目录)
 def is_audio_dir(path_dir) -> bool :
     audio = False
     items = os.listdir(path_dir)
     all_files = audio_files = 0
     for item in items :
-        if os.path.isfile(item) :
+        path_item = os.path.join(path_dir, item)
+        if os.path.isfile(path_item) :
             all_files += 1
             suffix = os.path.splitext(item)[1][1:]     #不要分隔符
             if suffix.upper() in AUDIO_FORMAT_NAMES :
@@ -174,10 +194,14 @@ def rip_info_from_dir_name(path_dir : str, artist_name : str = '', aa_dict : dic
         assert(artist_name != '')
     artist_name = cht_to_chs(artist_name)
     dir_name = os.path.basename(path_dir)
-    if dir_name == 'Beyond - 1989.《黑色迷牆》電影原聲大碟.flac' :
+    if dir_name == '五条人《故事会》 2018 WAV' :
         PRINT_DETAIL = True
+    
+    is_chs = StrHandler.is_lang_zh(dir_name, Percent=0.1)
+    
+
     ti = tag_info()
-    print('专辑目录名检测={}, artist_name={}, IA={}...'.format(dir_name, artist_name, ignore_artist))
+    print('专辑目录名检测={}, artist_name={}, IA={}。中文名专辑={}.'.format(dir_name, artist_name, ignore_artist, is_chs))
 
     SORT_LIST = list()
     for sn in ALBUM_SORT_NAMES :
@@ -190,7 +214,16 @@ def rip_info_from_dir_name(path_dir : str, artist_name : str = '', aa_dict : dic
     year = ''
     sort = ''       #EP OR SINGLE之类
     last_spliter = ''
-    infos = re.split(ALBUM_NAME_SPLITTERS_MATCH, dir_name)
+    infos = None
+    if is_chs : 
+        infos = re.split(CHS_ALBUM_NAME_SPLITTERS_MATCH, dir_name)
+    else :
+        infos = re.split(ALBUM_NAME_SPLITTERS_MATCH, dir_name)
+
+    if infos[0] == dir_name :
+        print('模式匹配串分割失败，尝试空格分割...')
+        infos = dir_name.split(SPLITTER_SPACE)
+
     for info in infos :
         if info is None :
             continue
@@ -200,14 +233,19 @@ def rip_info_from_dir_name(path_dir : str, artist_name : str = '', aa_dict : dic
             continue
         if PRINT_DETAIL :
             print('片段({})处理...'.format(info))
-        if info.upper() == artist_name.upper() and ignore_artist and not ignored :      #忽略艺人名处理
+        if is_matched_band_name(artist_name, info) and ignore_artist and not ignored :      #忽略艺人名处理
             ignored = True
+            if PRINT_DETAIL :
+                print('片段({})为艺人名，忽略。'.format(info))
             continue
 
         if info in ALBUM_NAME_SPLITTERS :   #分隔符
             last_spliter = info
             continue
-
+        if info.upper() in IGNORE_WORDS : #忽略词
+            if PRINT_DETAIL :
+                print('片段({})为忽略单词。'.format(info))
+            continue
         if info.upper() in AUDIO_FORMAT_NAMES :     #音频类型标记
             if PRINT_DETAIL :
                 print('片段({})为音频类型标记。'.format(info))
@@ -228,8 +266,9 @@ def rip_info_from_dir_name(path_dir : str, artist_name : str = '', aa_dict : dic
                 link_name += ' '
             link_name = link_name + info.upper() + SPECIAL_WORDS_SUFFIX
             continue
+
         if PRINT_DETAIL :
-            print('片段({})为普通文本，做专辑名处理。'.format(info))
+            print('片段({})为普通文本，做专辑名处理。last_spliter=({})。'.format(info, last_spliter))
         if last_spliter == '' :
             link_name += info
         else :
@@ -239,7 +278,10 @@ def rip_info_from_dir_name(path_dir : str, artist_name : str = '', aa_dict : dic
                 if len(link_name) > 0 and link_name[-1] != ' ' :
                     link_name += ' '
                 link_name = link_name + info
-
+            else :
+                if len(link_name) > 0 and link_name[-1] != ' ' :
+                    link_name += ' '
+                link_name = link_name + info
 
     if year != '' :
         link_name = year + '. ' + link_name
@@ -337,7 +379,7 @@ def rip_info_from_dir_name(path_dir : str, artist_name : str = '', aa_dict : dic
             assert(path_dir not in albums)
             albums[path_dir] = standard_name
             artist_albums[KEY_NAME_ALBUMS] = albums
-        print('通知：目录({})加入到字典。'.format(path_dir))
+        print('通知：目录={}加入到字典，标准名={}。'.format(path_dir, standard_name))
     return ti
 
 #-1=未知目录
@@ -349,12 +391,19 @@ def analysis_dir_name(path_dir : str, mode : int = -1, artist_name : str = '', a
     print('目录检查：path_dir={}, mode={}, artist={}.'.format(path_dir, mode, artist_name))
     dir_name = os.path.basename(path_dir)
     if mode == -1 or mode == 3 :    #专辑目录或未知目录
+        #if is_audio_dir(path_dir) :
         rip_info_from_dir_name(path_dir, artist_name, aa_dict, ignore_artist)
+        subs = os.listdir(path_dir)
+        for sub in subs :
+            path_sub = os.path.join(path_dir, sub)
+            if os.path.isdir(path_sub) :
+                analysis_dir_name(path_sub, mode, artist_name, aa_dict, ignore_artist)
     elif mode == 0 :                #根目录，子目录为艺人目录
         subs = os.listdir(path_dir)
         for sub in subs :
             path_artist = os.path.join(path_dir, sub)
-            analysis_dir_name(path_artist, 1, sub, aa_dict)
+            if os.path.isdir(path_artist) :
+                analysis_dir_name(path_artist, 1, sub, aa_dict)
     elif mode == 1 :        #艺人目录
         ignore_name = False
         if artist_name != '' :
@@ -385,10 +434,12 @@ def analysis_dir_name(path_dir : str, mode : int = -1, artist_name : str = '', a
             
             if sort :
                 path_sort = os.path.join(path_dir, sub)
-                analysis_dir_name(path_sort, 2, artist_name, aa_dict, ignore_name)
+                if os.path.isdir(path_sort) :
+                    analysis_dir_name(path_sort, 2, artist_name, aa_dict, ignore_name)
             else :
                 path_album = os.path.join(path_dir, sub)
-                analysis_dir_name(path_album, 2 if sorted else 3, artist_name, aa_dict, ignore_name)    
+                if os.path.isdir(path_album) :
+                    analysis_dir_name(path_album, 2 if sorted else 3, artist_name, aa_dict, ignore_name)    
     elif mode == 2 :    #分类目录
         ignore_name = False
         if artist_name != '' :
@@ -401,7 +452,8 @@ def analysis_dir_name(path_dir : str, mode : int = -1, artist_name : str = '', a
         subs = os.listdir(path_dir)
         for sub in subs :
             path_album = os.path.join(path_dir, sub)
-            analysis_dir_name(path_album, 2 if sorted else 3, artist_name, aa_dict, ignore_name)
+            if os.path.isdir(path_album) :
+                analysis_dir_name(path_album, 2 if sorted else 3, artist_name, aa_dict, ignore_name)
     else :
         print('参数异常：path_dir={}, mode={}, artist={}.'.format(path_dir, mode, artist_name))
     return
@@ -448,12 +500,20 @@ def test_rip_info_from_dir_name() :
             print('found key={}.'.format(k))
             print(ai[k])
 
-        ar = ai['ARTIST_DIR']
-        print('艺人({})的根目录={}...'.format(an, ar))
-        albums = ai['ALBUMS']
-        for ap in albums :
-            title = albums[ap]
-            print('  专辑标准名：{}, 目录={}.'.format(title, ap))
+
+        if KEY_NAME_ARTIST_DIR in ai :
+            ar = ai[KEY_NAME_ARTIST_DIR]
+            print('艺人({})的根目录={}...'.format(an, ar))
+        else :
+            print('异常：艺人({})没有根目录。'.format(an))
+
+        if KEY_NAME_ALBUMS in ai :
+            albums = ai[KEY_NAME_ALBUMS]
+            for ap in albums :
+                title = albums[ap]
+                print('  专辑标准名：{}, 目录={}.'.format(title, ap))
+        else :
+            print('异常：艺人({})没有专辑列表。'.format(an))
 
     return
 
