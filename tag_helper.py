@@ -37,7 +37,6 @@ ALBUM_NAME_SPLITTERS = ('-', '.', '_', '(', ')', '[', ']', '《', '》', '+', )
 
 CHS_ALBUM_NAME_SPLITTERS_MATCH = r'(-|_| |《|》|\+|\.|\(|\)|\[|\])\s*'
 
-
 SPLITTER_SPACE = ' '
 
 KEY_NAME_ARTIST_DIR = 'ARTIST_DIR'
@@ -174,17 +173,48 @@ def sub_dirs_is_sort(path_name : str) -> bool :
 
 class tag_info :
     def __init__(self) -> None:
+        self.title = ''             #歌曲名称
         self.artist_name = ''       #歌曲表演艺人，有多个艺人则用|分隔
         self.album_artist = ''      #专辑表演艺人，有多个艺人则用|分隔
-        self.album_name = ''
-        self.year = 1970            #专辑发布年份
-        self.CD_serial = 0          #用于多CD专辑
+        self.album_name = ''        #专辑名称
         self.track = 0              #音频轨道号
-        self.track_count = 0        #音轨所属CD的总音轨数量
-        self.title = ''             #歌曲名称
+        self.year = ''              #专辑发布时间（字符串格式，支持4位年份或者6位年份月份）
         self.genre = ''             #专辑流派
+        self.disc_serial = 1        #用于多CD专辑(单CD专辑为1，双CD专辑为1/2)
+        self.track_count = 0        #音轨所属disc的总音轨数量
         self.comment = ''           #注释
         return
+
+    def get_play_artist(self) -> str :
+        return self.artist_name if self.artist_name != '' else self.album_artist
+
+    def get_album_artist(self) -> str :
+        return self.album_artist if self.album_artist != '' else self.artist_name
+
+    def is_same_artist(self) -> bool :
+        samed = False
+        if (self.album_artist == '' and self.artist_name != '') or (self.album_artist != '' and self.artist_name == '' ) :
+            samed = True
+        elif self.album_artist.lower() == self.artist_name.lower() :
+            samed = True
+        return samed
+    #返回4位数的发布年份信息
+    def get_release_year_str(self) -> str :
+        year = ''
+        if len(self.year) >= 4 :
+            if len(self.year) == 4 :
+                year = self.year
+            else :
+                year = self.year[:4]
+            assert(year.isdigit())
+        return year
+    #返回发布时间信息，可能4位（2004），可能6位（200405）
+    def get_release_date_str(self) -> str :
+        date = ''
+        if len(self.year) >= 4 :
+            date = self.year
+            assert(date.isdigit())
+        return date
 
 #如ignore_artist为TRUE，则目录名中如果有艺人名，剔除该艺人名。
 def rip_info_from_dir_name(path_dir : str, artist_name : str = '', aa_dict : dict = None, ignore_artist :bool = False) -> tag_info :
@@ -523,4 +553,4 @@ def test_rip_info_from_dir_name() :
         rip_info_from_dir_name(path_dir, artist_name)
     return
 
-test_rip_info_from_dir_name()
+#test_rip_info_from_dir_name()

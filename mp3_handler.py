@@ -2,6 +2,7 @@
 #from mutagen.id3 import ID3, APIC, error
 import mutagen
 from mutagen.flac import Picture, FLAC
+from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, APIC, error
 import os
 
@@ -47,10 +48,18 @@ def flac_tag_handle(file_name : str) :
     audio.save()
     return
 
-def test_flac_file() :
-    file_name = 'Y:\\MUSES\\迪斯科\\港版荷东\\港版荷东精选(2CD)\\港版荷东精选02.flac\\05 - I Find The Way-Roger Meno.flac'
+def test_mp3_file() :
+    file_name = 'Y:\\MUSES\\华语男艺人\\罗大佑\\罗大佑 - 2005.香港搞搞真意思演唱会.mp3\\04 - 爱人同志 (Live).mp3'
+    audio = MP3(file_name)
+
+    print('开始打印metadata...')
+    # Printing the metadata
+    print(audio.pprint())
+    print('打印metadata结束.')
+
+
     #_update_tag(file_name)
-    flac_tag_handle(file_name)
+    #flac_tag_handle(file_name)
     return
 
-test_flac_file()
+test_mp3_file()
