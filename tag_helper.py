@@ -32,7 +32,7 @@ SPECIAL_WORDS = ('VA', '群星', )
 SPECIAL_WORDS_SUFFIX = ' -'
 
 #ALBUM_NAME_SPLITTERS = r'[-()\[\]]'
-ALBUM_NAME_SPLITTERS_MATCH = r'(-|_|\.|\(|\)|\[|\])\s*'       # 分隔符："-_()[]"，后面带N个空格
+ENG_ALBUM_NAME_SPLITTERS_MATCH = r'(-|_|\.|\(|\)|\[|\])\s*'       # 分隔符："-_()[]"，后面带N个空格
 ALBUM_NAME_SPLITTERS = ('-', '.', '_', '(', ')', '[', ']', '《', '》', '+', )
 
 CHS_ALBUM_NAME_SPLITTERS_MATCH = r'(-|_| |《|》|\+|\.|\(|\)|\[|\])\s*'
@@ -42,7 +42,8 @@ SPLITTER_SPACE = ' '
 KEY_NAME_ARTIST_DIR = 'ARTIST_DIR'
 KEY_NAME_ALBUMS = 'ALBUMS'
 
-IGNORE_WORDS = ('320K', '分轨', '专辑', 'WAV整轨', 'FLAC分轨', '原抓', )
+IGNORE_WORDS = ('320K', '分轨', '专辑', 'WAV整轨', 'FLAC分轨', '原抓', 'APE整轨', 'APE分轨', 'LPCD', 'AMCD', )
+IGNORE_DIRS = ('ARTWORK', 'ART', 'COVERS', 'COVER', 'SCANS', )
 
 # 转换繁体到简体
 def cht_to_chs(str) :
@@ -248,7 +249,7 @@ def rip_info_from_dir_name(path_dir : str, artist_name : str = '', aa_dict : dic
     if is_chs : 
         infos = re.split(CHS_ALBUM_NAME_SPLITTERS_MATCH, dir_name)
     else :
-        infos = re.split(ALBUM_NAME_SPLITTERS_MATCH, dir_name)
+        infos = re.split(ENG_ALBUM_NAME_SPLITTERS_MATCH, dir_name)
 
     if infos[0] == dir_name :
         print('模式匹配串分割失败，尝试空格分割...')
@@ -421,13 +422,15 @@ def analysis_dir_name(path_dir : str, mode : int = -1, artist_name : str = '', a
     print('目录检查：path_dir={}, mode={}, artist={}.'.format(path_dir, mode, artist_name))
     dir_name = os.path.basename(path_dir)
     if mode == -1 or mode == 3 :    #专辑目录或未知目录
-        #if is_audio_dir(path_dir) :
-        rip_info_from_dir_name(path_dir, artist_name, aa_dict, ignore_artist)
+        #先处理子目录
         subs = os.listdir(path_dir)
         for sub in subs :
             path_sub = os.path.join(path_dir, sub)
             if os.path.isdir(path_sub) :
                 analysis_dir_name(path_sub, mode, artist_name, aa_dict, ignore_artist)
+        #后处理自身
+        #if is_audio_dir(path_dir) :
+        rip_info_from_dir_name(path_dir, artist_name, aa_dict, ignore_artist)
     elif mode == 0 :                #根目录，子目录为艺人目录
         subs = os.listdir(path_dir)
         for sub in subs :
@@ -507,7 +510,8 @@ def test_rip_info_from_dir_name() :
     return
     '''
     artist_name = ''
-    root = 'Y:\\MUSES\\华语乐队'
+    root = 'Y:\\MUSES\\华语女艺人'
+    root = 'Y:\\MUSES\\欧美女艺人'
     #artist_name = os.path.basename(root)
     #root = 'Y:\\MUSES\\华语女艺人\\蔡健雅'
     #artist_name = os.path.basename(root)
